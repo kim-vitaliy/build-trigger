@@ -2,6 +2,7 @@ plugins {
     id 'java'
     id 'org.springframework.boot' version '2.7.7'
     id 'io.spring.dependency-management' version '1.1.0'
+    id 'org.jetbrains.kotlin.jvm' version '1.8.0'
 }
 
 group = 'com.jetbrains'
@@ -12,16 +13,50 @@ repositories {
     mavenCentral()
 }
 
+apply from: 'slowTest.gradle'
+
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web',
-            'com.google.code.findbugs:jsr305:3.0.2'
+            'org.springframework.boot:spring-boot-starter-validation',
+            'org.springframework.boot:spring-boot-starter-amqp',
+
+            'org.springframework.boot:spring-boot-starter-data-jpa',
+            'com.vladmihalcea:hibernate-types-52:2.21.1',
+            'org.flywaydb:flyway-core:9.11.0',
+            'org.postgresql:postgresql:42.5.1',
+
+            'com.cronutils:cron-utils:9.2.0',
+            'com.google.code.findbugs:jsr305:3.0.2',
+            'com.google.guava:guava:21.0',
+            'org.eclipse.jgit:org.eclipse.jgit:6.4.0.202211300538-r',
+            'org.jetbrains.kotlin:kotlin-stdlib-jdk8'
 
     testImplementation 'org.springframework.boot:spring-boot-starter-test',
-            'org.testng:testng:6.14.3',
+            'org.testng:testng:7.7.0',
             'org.mockito:mockito-core:3.6.28',
-            'org.assertj:assertj-core:3.21.0'
+            'org.amshove.kluent:kluent:1.72'
+
+    slowTestImplementation 'org.springframework.boot:spring-boot-starter-test',
+            'org.apache.httpcomponents.client5:httpclient5:5.1.3',
+            'org.testcontainers:postgresql:1.17.6',
+            'org.apache.commons:commons-lang3:3.12.0',
+            'com.github.tomakehurst:wiremock-jre8-standalone:2.33.2'
 }
 
 tasks.named('test') {
-    useJUnitPlatform()
+    useTestNG()
+    testLogging {
+        events "passed", "skipped", "failed"
+    }
+}
+
+compileKotlin {
+    kotlinOptions {
+        jvmTarget = "1.8"
+    }
+}
+compileTestKotlin {
+    kotlinOptions {
+        jvmTarget = "1.8"
+    }
 }

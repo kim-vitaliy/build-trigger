@@ -1,0 +1,37 @@
+sourceSets {
+    slowTest {
+        def dependentClasspath = main.output + main.compileClasspath + test.output + test.compileClasspath
+        java {
+            compileClasspath += dependentClasspath
+            runtimeClasspath += dependentClasspath
+            srcDirs("src/slowTest/java")
+        }
+        kotlin {
+            compileClasspath += dependentClasspath
+            runtimeClasspath += dependentClasspath
+            srcDirs("src/slowTest/kotlin")
+        }
+    }
+}
+
+configurations {
+    slowTestCompileClassPath.extendsFrom compileClassPath
+    slowTestImplementation.extendsFrom implementation
+    slowTestRuntimeOnly.extendsFrom testRuntimeOnly
+}
+
+tasks.register('slowTest', Test) {
+    description = "Runs component tests"
+    group = "verification"
+    testClassesDirs = sourceSets.slowTest.output.classesDirs
+    classpath = sourceSets.slowTest.runtimeClasspath
+    shouldRunAfter test
+    useTestNG()
+    systemProperty 'spring.profiles.active', 'slow-test'
+    testLogging {
+        events "passed", "skipped", "failed"
+//        showStandardStreams = true
+    }
+}
+
+check.dependsOn slowTest

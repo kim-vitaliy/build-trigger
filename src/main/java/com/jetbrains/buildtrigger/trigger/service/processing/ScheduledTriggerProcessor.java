@@ -1,7 +1,6 @@
 package com.jetbrains.buildtrigger.trigger.service.processing;
 
 import com.jetbrains.buildtrigger.domain.Result;
-import com.jetbrains.buildtrigger.trigger.dao.TriggerRepository;
 import com.jetbrains.buildtrigger.trigger.domain.Branch;
 import com.jetbrains.buildtrigger.trigger.domain.BuildTrigger;
 import com.jetbrains.buildtrigger.trigger.domain.ExecutionByTimeData;
@@ -18,7 +17,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.Nonnull;
-import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.Optional;
 import java.util.Set;
@@ -38,17 +36,14 @@ public class ScheduledTriggerProcessor implements TriggerProcessor {
     private final NextExecutionTimeProvider nextExecutionTimeProvider;
     private final GitManager gitManager;
     private final BuildTriggeredEventProducer buildTriggeredEventProducer;
-    private final TriggerRepository triggerRepository;
 
     @Autowired
     public ScheduledTriggerProcessor(NextExecutionTimeProvider nextExecutionTimeProvider,
                                      GitManager gitManager,
-                                     BuildTriggeredEventProducer buildTriggeredEventProducer,
-                                     TriggerRepository triggerRepository) {
+                                     BuildTriggeredEventProducer buildTriggeredEventProducer) {
         this.nextExecutionTimeProvider = nextExecutionTimeProvider;
         this.gitManager = gitManager;
         this.buildTriggeredEventProducer = buildTriggeredEventProducer;
-        this.triggerRepository = triggerRepository;
     }
 
     @Nonnull
@@ -74,7 +69,6 @@ public class ScheduledTriggerProcessor implements TriggerProcessor {
     /**
      * Обработать триггер типа {@link TriggerType#SCHEDULED}.
      * Если данные о ветке присутствуют в удалённом репозитории, инициируется сборка.
-     * Если результат успешный, время следующего исполнения обновляется согласно выбранным настройкам.
      *
      * @param trigger данные триггера
      */
@@ -86,20 +80,12 @@ public class ScheduledTriggerProcessor implements TriggerProcessor {
                 .collect(Collectors.toSet());
 
         if (remoteBranches.isEmpty()) {
-            log.warn("Error while processing trigger: triggerId={}", trigger.getId());
             return Result.errorEmpty();
         }
 
         for (Branch branch : trigger.getBranches()) {
             processBranch(branch, remoteBranches, trigger);
         }
-
-        ZonedDateTime now = ZonedDateTime.now(ZoneId.systemDefault());
-        trigger.setUpdated(now);
-        trigger.setNextExecutionTime(getNextExecutionTime(now, trigger).orElseThrow());
-
-        triggerRepository.save(trigger);
-        log.info("Trigger has been processed: nextExecutionTime={}", trigger.getNextExecutionTime().orElseThrow());
 
         return Result.successEmpty();
     }

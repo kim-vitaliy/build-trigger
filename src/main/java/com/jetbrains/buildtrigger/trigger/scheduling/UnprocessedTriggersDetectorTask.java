@@ -34,7 +34,7 @@ public class UnprocessedTriggersDetectorTask {
     @Scheduled(fixedDelayString = "${scheduling.unprocessed-triggers.fixed-delay-ms}")
     public void execute() {
         try {
-            executor.execute(buildTriggerManager::detectUnprocessedTrigger);
+            executor.execute(buildTriggerManager::detectAndProcess);
         } catch (RejectedExecutionException e) {
             log.warn("There are no available executors to execute task", e);
         }

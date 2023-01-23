@@ -1,7 +1,6 @@
 package com.jetbrains.buildtrigger.trigger.service.processing;
 
 import com.jetbrains.buildtrigger.domain.Result;
-import com.jetbrains.buildtrigger.trigger.dao.TriggerRepository;
 import com.jetbrains.buildtrigger.trigger.domain.Branch;
 import com.jetbrains.buildtrigger.trigger.domain.BuildTrigger;
 import com.jetbrains.buildtrigger.trigger.domain.TriggerType;
@@ -17,7 +16,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.Nonnull;
-import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.Map;
 import java.util.Optional;
@@ -37,17 +35,14 @@ public class VcsTriggerProcessor implements TriggerProcessor {
     private final NextExecutionTimeProvider nextExecutionTimeProvider;
     private final GitManager gitManager;
     private final BuildTriggeredEventProducer buildTriggeredEventProducer;
-    private final TriggerRepository triggerRepository;
 
     @Autowired
     public VcsTriggerProcessor(NextExecutionTimeProvider nextExecutionTimeProvider,
                                GitManager gitManager,
-                               BuildTriggeredEventProducer buildTriggeredEventProducer,
-                               TriggerRepository triggerRepository) {
+                               BuildTriggeredEventProducer buildTriggeredEventProducer) {
         this.nextExecutionTimeProvider = nextExecutionTimeProvider;
         this.gitManager = gitManager;
         this.buildTriggeredEventProducer = buildTriggeredEventProducer;
-        this.triggerRepository = triggerRepository;
     }
 
     @Nonnull
@@ -87,8 +82,6 @@ public class VcsTriggerProcessor implements TriggerProcessor {
      * и инициируем сборку.
      * - Иначе, если коммиты совпадают, сборка проведена не будет.
      *
-     * Если результат успешный, время следующего исполнения обновляется согласно выбранным настройкам.
-     *
      * @param trigger данные триггера
      */
     @Nonnull
@@ -99,20 +92,12 @@ public class VcsTriggerProcessor implements TriggerProcessor {
                 .collect(Collectors.toMap(Ref::getName, ref -> ref.getObjectId().getName()));
 
         if (remoteBranchesToCommit.isEmpty()) {
-            log.warn("Error while processing trigger: triggerId={}", trigger.getId());
             return Result.errorEmpty();
         }
 
         for (Branch branch : trigger.getBranches()) {
             processBranch(branch, remoteBranchesToCommit, trigger);
         }
-
-        ZonedDateTime now = ZonedDateTime.now(ZoneId.systemDefault());
-        trigger.setUpdated(now);
-        trigger.setNextExecutionTime(getNextExecutionTime(now, trigger).orElse(null));
-
-        triggerRepository.save(trigger);
-        log.info("Trigger has been processed: nextExecutionTime={}", trigger.getNextExecutionTime().orElse(null));
 
         return Result.successEmpty();
     }

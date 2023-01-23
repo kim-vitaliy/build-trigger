@@ -1,5 +1,6 @@
 package com.jetbrains.buildtrigger.trigger.service;
 
+import com.jetbrains.buildtrigger.config.properties.TriggerProperties;
 import com.jetbrains.buildtrigger.domain.Result;
 import com.jetbrains.buildtrigger.trigger.dao.TriggerRepository;
 import com.jetbrains.buildtrigger.trigger.domain.BuildTrigger;
@@ -12,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.Map;
@@ -30,12 +32,15 @@ public class BuildTriggerManager {
 
     private final TriggerRepository triggerRepository;
     private final Map<TriggerType, TriggerProcessor> triggerProcessors;
+    private final TriggerProperties triggerProperties;
 
     @Autowired
     public BuildTriggerManager(TriggerRepository triggerRepository,
-                               Map<TriggerType, TriggerProcessor> triggerProcessors) {
+                               Map<TriggerType, TriggerProcessor> triggerProcessors,
+                               TriggerProperties triggerProperties) {
         this.triggerRepository = triggerRepository;
         this.triggerProcessors = triggerProcessors;
+        this.triggerProperties = triggerProperties;
     }
 
     /**
@@ -46,20 +51,44 @@ public class BuildTriggerManager {
      *
      * Если триггер был найден, в рамках транзакции, пока действует блокировка, делегируем обработку соответствующему обработчику,
      * на основании {@link BuildTrigger#getType()}.
+     *
+     * Если результат обработки успешный, время следующего исполнения обновляется согласно выбранным настройкам триггера.
+     * Иначе обработка будет отложена на константный период времени, согласно {@link TriggerProperties#getNextExecutionDelayOnError()}.
      */
     @Transactional
-    public void detectUnprocessedTrigger() {
+    public Result<Void, Void> detectAndProcess() {
         ZonedDateTime now = ZonedDateTime.now(ZoneId.systemDefault());
 
         Optional<BuildTrigger> unprocessedOpt = triggerRepository.fetchUnprocessedWithLock(now);
         if (unprocessedOpt.isEmpty()) {
-            return;
+            return Result.successEmpty();
         }
 
-        BuildTrigger unprocessed = unprocessedOpt.orElseThrow();
-        log.info("Unprocessed trigger detected: trigger={}", unprocessed);
+        BuildTrigger trigger = unprocessedOpt.orElseThrow();
+        log.info("Unprocessed trigger detected: trigger={}", trigger);
 
-        Optional.ofNullable(triggerProcessors.get(unprocessed.getType())).orElseThrow().process(unprocessed);
+        TriggerProcessor processor = Optional.ofNullable(triggerProcessors.get(trigger.getType())).orElseThrow();
+        Result<Void, Void> processingResult = processor.process(trigger);
+        if (processingResult.isError()) {
+            ZonedDateTime nextExecution = now.plus(triggerProperties.getNextExecutionDelayOnError());
+            updateNextExecutionTime(nextExecution, now, trigger);
+            log.warn("Error while processing trigger. Next execution will be delayed: triggerId={}, nextExecution={}",
+                    trigger.getId(), nextExecution);
+            return Result.errorEmpty();
+        }
+
+        updateNextExecutionTime(processor.getNextExecutionTime(now, trigger).orElse(null), now, trigger);
+        log.info("Trigger has successfully been processed: nextExecutionTime={}", trigger.getNextExecutionTime().orElse(null));
+        return Result.successEmpty();
+    }
+
+    private void updateNextExecutionTime(@Nullable ZonedDateTime nextExecutionTime,
+                                         @Nonnull ZonedDateTime now,
+                                         @Nonnull BuildTrigger trigger) {
+        trigger.setUpdated(now);
+        trigger.setNextExecutionTime(nextExecutionTime);
+
+        triggerRepository.save(trigger);
     }
 
     /**

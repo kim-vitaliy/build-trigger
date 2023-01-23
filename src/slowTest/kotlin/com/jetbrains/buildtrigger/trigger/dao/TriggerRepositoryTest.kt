@@ -52,6 +52,8 @@ class TriggerRepositoryTest : AbstractSlowTest() {
 
             // and: на триггер взята блокировка
             triggerClient.deleteTriggerById(found.get().id).errorOrThrow.code shouldBeEqualTo DeleteBuildTriggerError.DeleteBuildTriggerErrorType.TRIGGER_IS_LOCKED
+            found.orElseThrow().setNextExecutionTime(null)
+            triggerRepository.save(found.orElseThrow())
         }
 
         // удалить триггеры, чтобы не влияли на параллельные тесты
